@@ -1,0 +1,60 @@
+﻿@model AutoComplete.Controllers.HomeController.DisposalInformation
+
+@{
+    ViewData["Title"] = "Form Page";
+}
+
+
+<div class="text-center">
+    <h1 class="display-4">Garbage Disposal</h1>
+
+    <div class="container">
+        <form class="form-group" method="post">
+            <input name="address" id="autocomplete" class="form-control" placeholder="Enter address" spellcheck="false" autofocus value="@ViewBag.Address"/>
+            <input type="submit" value="Submit" class="btn btn-primary form-control mt-1">
+        </form>
+        @if (Model is not null)
+        {
+            <h3>@Model.Area - @Model.AreaName</h3>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>From</th>
+                        <th>To</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var schedule in Model.ScheduleList)
+                    {
+                        <tr>
+                            <td>@schedule.Dags_Fra</td>
+                            <td>@schedule.Dags_Til</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"
+        integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
+        crossorigin="anonymous"></script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"
+        integrity="sha256-VazP97ZCwtekAsvgPBSUwPFKdrwD3unUfSGVYrahUqU="
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-U1DAWAznBHeqEIlVSCgzq+c9gqGAJn5c/t99JyeKa9xxaYpSvHU5awsuZVVFIhvj"
+        crossorigin="anonymous"></script>
+<script>
+    $(document).ready(
+        function () {
+            $("#autocomplete").autocomplete({
+                source: "/Home/AutoCompleteSearch",
+                select: function () {
+                    $(this).keydown();
+                }
+            });
+        }
+    );
+</script>
