@@ -141,7 +141,7 @@ namespace AutoComplete.Models
                 AreaScheduleListDictionary[schedule.Svaedi].Add(schedule);
             }
 
-            //
+            // Load Area Name mapping
             IEnumerable<Area> areaEnumerator = addressMapper.Fetch<Area>("SvaediNofn");
             foreach (Area area in areaEnumerator)
             {
@@ -149,10 +149,22 @@ namespace AutoComplete.Models
             }
         }
 
+        // A few of the record definitions below have strange names to match column headers in Excel file
         public record Address(string Stadfang, string Svaedi)
         {
             public string Key => Stadfang.ToLower();
         }
+
+        public record AreaSchedule(
+            string Svaedi,
+            DateTime Dags_Fra,
+            DateTime? Dags_Til
+        );
+
+        public record Area(
+            string Svaedi,
+            string Nafn
+        );
 
         public sealed record LabelKey(string Label)
         {
@@ -172,17 +184,6 @@ namespace AutoComplete.Models
         public record LabelValue(
             string Label,
             string Value
-        );
-
-        public record AreaSchedule(
-            string Svaedi,
-            DateTime Dags_Fra,
-            DateTime? Dags_Til
-        );
-
-        public record Area(
-            string Svaedi,
-            string Nafn
         );
     }
 }

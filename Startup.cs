@@ -20,8 +20,7 @@ namespace AutoComplete
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            string DisposalModelPath = Path.Combine(Configuration["ASPNETCORE_IIS_PHYSICAL_PATH"], Configuration["DisposalModelXlsxFile"]);
-            services.AddSingleton(new DisposalModel(DisposalModelPath));
+            services.AddSingleton(new DisposalModel(Configuration["DisposalModelXlsxFile"]));
 
             services.AddControllersWithViews();
         }
