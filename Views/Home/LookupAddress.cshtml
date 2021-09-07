@@ -1,21 +1,20 @@
 ﻿@model AutoComplete.Controllers.HomeController.DisposalInformation
-
 @{
-    ViewData["Title"] = "Form Page";
+    ViewData["Title"] = "Lookup Address";
 }
 
-
 <div class="text-center">
-    <h1 class="display-4">Garbage Disposal</h1>
+    <h1 class="display-4">Fletting eftir heimilisfangi</h1>
 
     <div class="container">
         <form class="form-group" method="post">
-            <input name="address" id="autocomplete" class="form-control" placeholder="Enter address" spellcheck="false" autofocus value="@ViewBag.Address"/>
+            <input name="address" id="autocomplete" class="form-control" placeholder="Gata í nefnifalli og númer" spellcheck="false" autofocus value="@ViewBag.Address" />
             <input type="submit" value="Submit" class="btn btn-primary form-control mt-1">
+            <input type="submit" value="REST" class="btn btn-secondary form-control mt-1" onclick="$(this).closest('form').attr('action', 'LookupAddressREST');">
         </form>
         @if (Model is not null)
         {
-            <h3>@Model.Area - @Model.AreaName</h3>
+            <h2>@Model.Area - @Model.AreaName</h2>
             <table class="table">
                 <thead>
                     <tr>
@@ -24,12 +23,25 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var schedule in Model.ScheduleList)
+                    <tr>
+                        <th colspan="2">Orkutunur (Gráar)</th>
+                    </tr>
+                    @foreach (var schedule in Model.GreyScheduleList)
                     {
                         <tr>
                             <td>@schedule.Dags_Fra</td>
                             <td>@schedule.Dags_Til</td>
                         </tr>
+                    }
+                    <tr>
+                        <th colspan="2">Endurvinnslutunur (Bláar)</th>
+                    </tr>
+                    @foreach (var schedule in Model.GreyScheduleList)
+                    {
+                    <tr>
+                        <td>@schedule.Dags_Fra</td>
+                        <td>@schedule.Dags_Til</td>
+                    </tr>
                     }
                 </tbody>
             </table>

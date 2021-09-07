@@ -29,23 +29,39 @@ namespace AutoComplete.Controllers
             return View();
         }
 
-        public IActionResult Form(string address)
+        public IActionResult LookupAddress(string address)
         {
             if (!string.IsNullOrWhiteSpace(address))
             {
                 string area = DisposalModel.GetAreaFromAddress(address);
                 string areaName = DisposalModel.GetAreaName(area);
-                List<DisposalModel.AreaSchedule> scheduleList = DisposalModel.GetScheduleListFromArea(area);
+                List<DisposalModel.AreaSchedule> greyScheduleList = DisposalModel.GetGreyScheduleListFromArea(area);
+                List<DisposalModel.AreaSchedule> blueScheduleList = DisposalModel.GetBlueScheduleListFromArea(area);
                 ViewBag.Address = address;
-                return View(new DisposalInformation(area, areaName, scheduleList));
+                return View(new DisposalInformation(address, area, areaName, greyScheduleList, blueScheduleList));
             }
             return View();
         }
 
+        public DisposalInformation LookupAddressREST(string address)
+        {
+            if (!string.IsNullOrWhiteSpace(address))
+            {
+                string area = DisposalModel.GetAreaFromAddress(address);
+                string areaName = DisposalModel.GetAreaName(area);
+                List<DisposalModel.AreaSchedule> greyScheduleList = DisposalModel.GetGreyScheduleListFromArea(area);
+                List<DisposalModel.AreaSchedule> blueScheduleList = DisposalModel.GetBlueScheduleListFromArea(area);
+                return new DisposalInformation(address, area, areaName, greyScheduleList, blueScheduleList);
+            }
+            return null;
+        }
+
         public record DisposalInformation(
+            string Address,
             string Area,
             string AreaName,
-            List<DisposalModel.AreaSchedule> ScheduleList
+            List<DisposalModel.AreaSchedule> GreyScheduleList,
+            List<DisposalModel.AreaSchedule> BlueScheduleList
         );
 
         public JsonResult AutoCompleteSearch(string term)

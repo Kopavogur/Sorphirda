@@ -10,14 +10,17 @@ namespace AutoComplete.Models
     {
         public Dictionary<LabelKey, List<Address>> AddressDictionary { get; init; }
 
-        public Dictionary<string, List<AreaSchedule>> AreaScheduleListDictionary { get; init; }
+        public Dictionary<string, List<AreaSchedule>> AreaScheduleGreyListDictionary { get; init; }
+
+        public Dictionary<string, List<AreaSchedule>> AreaScheduleBlueListDictionary { get; init; }
 
         public Dictionary<string, Area> AreaDictionary { get; init; }
 
         public DisposalModel(string excelFile)
         {
             AddressDictionary = new();
-            AreaScheduleListDictionary = new();
+            AreaScheduleGreyListDictionary = new();
+            AreaScheduleBlueListDictionary = new();
             AreaDictionary = new();
             LoadAddressDictionary(excelFile);
         }
@@ -81,14 +84,24 @@ namespace AutoComplete.Models
             return area;
         }
 
-        public List<AreaSchedule> GetScheduleListFromArea(string area, bool showFuture = true)
+        public List<AreaSchedule> GetBlueScheduleListFromArea(string area, bool showFuture = true)
+        {
+            return GetScheduleListFromArea(area, AreaScheduleBlueListDictionary, showFuture);
+        }
+
+        public List<AreaSchedule> GetGreyScheduleListFromArea(string area, bool showFuture = true)
+        {
+            return GetScheduleListFromArea(area, AreaScheduleGreyListDictionary, showFuture);
+        }
+
+        private List<AreaSchedule> GetScheduleListFromArea(string area, Dictionary<string, List<AreaSchedule>> areaScheduleListDictionary, bool showFuture)
         {
             List<AreaSchedule> scheduleList = new();
-            if (area is not null && AreaScheduleListDictionary.ContainsKey(area)) {
+            if (area is not null && areaScheduleListDictionary.ContainsKey(area)) {
                 if (showFuture)
                 {
                     DateTime now = DateTime.Now;
-                    foreach (AreaSchedule schedule in AreaScheduleListDictionary[area])
+                    foreach (AreaSchedule schedule in areaScheduleListDictionary[area])
                     {
                         if (schedule.Dags_Fra > now || (schedule.Dags_Til is not null && schedule.Dags_Til > now))
                         {
@@ -98,7 +111,7 @@ namespace AutoComplete.Models
                 }
                 else
                 {
-                    scheduleList = AreaScheduleListDictionary[area];
+                    scheduleList = areaScheduleListDictionary[area];
                 }
             }
             return scheduleList;
@@ -130,15 +143,30 @@ namespace AutoComplete.Models
                 AddressDictionary[key].Add(new(specifier, addr.Svaedi));
             }
 
-            // Load Area disposal schedules
-            IEnumerable<AreaSchedule> scheduleEnumerator = addressMapper.Fetch<AreaSchedule>("Losun");
-            foreach (AreaSchedule schedule in scheduleEnumerator)
+            // Load Area Grey disposal schedules
             {
-                if (!AreaScheduleListDictionary.ContainsKey(schedule.Svaedi))
+                IEnumerable<AreaSchedule> scheduleEnumerator = addressMapper.Fetch<AreaSchedule>("LosunGra");
+                foreach (AreaSchedule schedule in scheduleEnumerator)
                 {
-                    AreaScheduleListDictionary.Add(schedule.Svaedi, new());
+                    if (!AreaScheduleGreyListDictionary.ContainsKey(schedule.Svaedi))
+                    {
+                        AreaScheduleGreyListDictionary.Add(schedule.Svaedi, new());
+                    }
+                    AreaScheduleGreyListDictionary[schedule.Svaedi].Add(schedule);
                 }
-                AreaScheduleListDictionary[schedule.Svaedi].Add(schedule);
+            }
+
+            // Load Area Blue disposal schedules
+            {
+                IEnumerable<AreaSchedule> scheduleEnumerator = addressMapper.Fetch<AreaSchedule>("LosunBla");
+                foreach (AreaSchedule schedule in scheduleEnumerator)
+                {
+                    if (!AreaScheduleBlueListDictionary.ContainsKey(schedule.Svaedi))
+                    {
+                        AreaScheduleBlueListDictionary.Add(schedule.Svaedi, new());
+                    }
+                    AreaScheduleBlueListDictionary[schedule.Svaedi].Add(schedule);
+                }
             }
 
             // Load Area Name mapping
