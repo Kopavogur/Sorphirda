@@ -8,6 +8,7 @@
   <ItemGroup>
     <PackageReference Include="ExcelMapper" Version="5.2.314" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Razor.RuntimeCompilation" Version="5.0.9" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="SuccincT" Version="4.0.0" />
   </ItemGroup>
 

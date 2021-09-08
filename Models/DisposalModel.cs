@@ -41,7 +41,7 @@ namespace AutoComplete.Models
                     if (section.Key.StartsWith(specifier))
                     {
                         string address = streetName + section.Stadfang;
-                        labelValues.Add(new(address, ""));
+                        labelValues.Add(new(address, address));
                         exactMatch = (section.Key == specifier);
                     }
                 }
@@ -55,7 +55,7 @@ namespace AutoComplete.Models
             {
                 foreach (var street in streetMatches)
                 {
-                    labelValues.Add(new(street.Key.Label, ""));
+                    labelValues.Add(new(street.Key.Label, street.Key.Label));
                 }
             }
             return labelValues;
@@ -210,8 +210,8 @@ namespace AutoComplete.Models
         }
 
         public record LabelValue(
-            string Label,
-            string Value
+            string label,
+            string value
         );
     }
 }

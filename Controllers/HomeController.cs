@@ -1,6 +1,7 @@
 ﻿using AutoComplete.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using System.Collections.Generic;
 using System.Diagnostics;
 
@@ -64,9 +65,15 @@ namespace AutoComplete.Controllers
             List<DisposalModel.AreaSchedule> BlueScheduleList
         );
 
-        public JsonResult AutoCompleteSearch(string term)
+        public List<DisposalModel.LabelValue> AutoCompleteSearch(string term)
         {
-            return Json(DisposalModel.AutoCompleteSearch(term));
+            return DisposalModel.AutoCompleteSearch(term);
+        }
+
+        public string AutoCompleteSearchP(string term, string callback)
+        {
+            string serialized = JsonConvert.SerializeObject(DisposalModel.AutoCompleteSearch(term));
+            return $"{callback}({serialized})";
         }
 
         public IActionResult Privacy()
