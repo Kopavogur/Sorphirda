@@ -5,6 +5,7 @@ using NPOI.XSSF.UserModel;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -24,7 +25,7 @@ namespace AutoComplete.Models
 
         public Dictionary<string, Area> AreaDictionary { get; init; }
 
-        public DisposalModel(string disposalFile, string infoFile)
+        public DisposalModel(string disposalFile, string infoFile, CultureInfo cultureInfo)
         {
             AddressDictionary = new();
             AddressInfoDictionary = new();
@@ -32,8 +33,7 @@ namespace AutoComplete.Models
             AreaScheduleBlueListDictionary = new();
             AreaDictionary = new();
             LoadAddressDictionary(disposalFile);
-            //LoadAddressInfoDictionary(infoFile);
-            AddressInfoDictionary = CsvToDictionary<AddressInfo>(infoFile, "{Heiti_nf} {Husmerking} {Serheiti}");
+            AddressInfoDictionary = CsvToDictionary<AddressInfo>(infoFile, "{Heiti_nf} {Husmerking} {Serheiti}", cultureInfo);
         }
 
         public List<LabelValue> AutoCompleteSearch(string term, bool suppressExact = true)
@@ -207,7 +207,7 @@ namespace AutoComplete.Models
             }
         }
 
-        public Dictionary<string, V> CsvToDictionary<V>(string fileName, string keyFormat, bool duplicateKeyException = false) 
+        public Dictionary<string, V> CsvToDictionary<V>(string fileName, string keyFormat, CultureInfo cultureInfo, bool duplicateKeyException = false) 
         {
             Dictionary<string, V> dictionary = new();
 
@@ -278,7 +278,7 @@ namespace AutoComplete.Models
                     }
 
                     // Duplicate keys do not work in Dictionary and do also not provide deterministic lookup results.
-                    // Change the keyFormat if the current one is not properly thought out. 
+                    // Change keyFormat if the current one is not properly thought out. 
                     if (!dictionary.ContainsKey(key) || duplicateKeyException)
                     {
                         dictionary.Add(key, (V)Activator.CreateInstance(typeof(V), values));
