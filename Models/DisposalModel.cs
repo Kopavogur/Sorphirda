@@ -1,14 +1,22 @@
 ﻿using AutoComplete.Utilities;
 using Ganss.Excel;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace AutoComplete.Models
 {
     public class DisposalModel
     {
-        public Dictionary<LabelKey, List<Address>> AddressDictionary { get; init; }
+        public SortedDictionary<LabelKey, List<Address>> AddressDictionary { get; init; }
+
+        public Dictionary<string, AddressInfo> AddressInfoDictionary { get; init; }
 
         public Dictionary<string, List<AreaSchedule>> AreaScheduleGreyListDictionary { get; init; }
 
@@ -16,46 +24,49 @@ namespace AutoComplete.Models
 
         public Dictionary<string, Area> AreaDictionary { get; init; }
 
-        public DisposalModel(string excelFile)
+        public DisposalModel(string disposalFile, string infoFile)
         {
             AddressDictionary = new();
+            AddressInfoDictionary = new();
             AreaScheduleGreyListDictionary = new();
             AreaScheduleBlueListDictionary = new();
             AreaDictionary = new();
-            LoadAddressDictionary(excelFile);
+            LoadAddressDictionary(disposalFile);
+            //LoadAddressInfoDictionary(infoFile);
+            AddressInfoDictionary = CsvToDictionary<AddressInfo>(infoFile, "{Heiti_nf} {Husmerking} {Serheiti}");
         }
 
-        public List<LabelValue> AutoCompleteSearch(string term)
+        public List<LabelValue> AutoCompleteSearch(string term, bool suppressExact = true)
         {
-            (string streetKey, string specifier) = GeneralUtils.SplitOnFirstSpace(term.ToLower());
-            var streetMatches = AddressDictionary.Where(p => p.Key.Key.StartsWith(streetKey)).ToList();
+            (string streetKey, string specifierKey) = GeneralUtils.SplitOnFirstSpace(term.ToLower());
+
+            List<LabelKey> keyList = AddressDictionary.Keys.ToList<LabelKey>();
+            int pos = keyList.BinarySearch(new(streetKey));
 
             List<LabelValue> labelValues = new();
-            if (streetMatches.Count == 1 && streetMatches[0].Key.Key == streetKey)
+            if (pos < 0)
             {
-                var street = streetMatches[0];
-                string streetName = street.Key.Label + " ";
-                bool exactMatch = false;
-                foreach (Address section in street.Value)
+                for (int i = ~pos; i < keyList.Count && keyList[i].Key.StartsWith(streetKey); i++)
                 {
-                    if (section.Key.StartsWith(specifier))
-                    {
-                        string address = streetName + section.Stadfang;
-                        labelValues.Add(new(address, address));
-                        exactMatch = (section.Key == specifier);
+                    labelValues.Add(new(keyList[i].Label, null));
+                }
+            } else {
+                bool exactMatch = false;
+                List<Address> specifierList = AddressDictionary[new(streetKey)];
+                foreach (Address specifier in specifierList)
+                {
+                    if (specifier.Key.StartsWith(specifierKey)) {
+                        string infoKey = streetKey + " " + specifier.Key;
+                        AddressInfoDictionary.TryGetValue(infoKey, out AddressInfo info);
+                        labelValues.Add(new(keyList[pos].Label + " " + specifier.Stadfang, info));
+                        exactMatch = (specifier.Key == specifierKey);
                     }
                 }
-                // Clear list if there one exact match
-                if (labelValues.Count == 1 && exactMatch)
+
+                // Clear list if there one exact match to prevent recurrence of menu.
+                if (labelValues.Count == 1 && exactMatch && suppressExact)
                 {
                     labelValues.Clear();
-                }
-            }
-            else if (streetMatches.Count > 0)
-            {
-                foreach (var street in streetMatches)
-                {
-                    labelValues.Add(new(street.Key.Label, street.Key.Label));
                 }
             }
             return labelValues;
@@ -140,7 +151,7 @@ namespace AutoComplete.Models
                 { 
                     AddressDictionary.Add(key, new());
                 }
-                AddressDictionary[key].Add(new(specifier, addr.Svaedi));
+                AddressDictionary[key].Add(addr with { Stadfang = specifier });
             }
 
             // Load Area Grey disposal schedules
@@ -177,11 +188,124 @@ namespace AutoComplete.Models
             }
         }
 
+        // Using ExcelMapper for this larger payload runs VERY slow and has a HUGE memory footprint.
+        // See the generic CsvToDictionary implementation below that provides a much more clement treatment.
+        public void LoadAddressInfoDictionary(string workbookFile)
+        {
+            {
+                ExcelMapper addressMapper = new(workbookFile);
+                SortedList<string, string> sample = new();
+                IEnumerable<AddressInfo> addressEnumerator = addressMapper.Fetch<AddressInfo>("Stadfangaskra");
+                foreach (AddressInfo addr in addressEnumerator)
+                {
+                    string key = (addr.Heiti_nf + " " + addr.Husmerking).ToLower();
+                    if (!AddressInfoDictionary.ContainsKey(key))
+                    {
+                        AddressInfoDictionary.Add(key, addr with { Heiti_nf = null, Husmerking = null });
+                    }
+                }
+            }
+        }
+
+        public Dictionary<string, V> CsvToDictionary<V>(string fileName, string keyFormat, bool duplicateKeyException = false) 
+        {
+            Dictionary<string, V> dictionary = new();
+
+            // Pattern to split on ; honoring double quotes.
+            Regex splitRegex = new("(?:^|;)(\"(?:[^\"])*\"|[^;]*)", RegexOptions.Compiled);
+
+            using (StreamReader reader = new(fileName))
+            {
+                // Make sure header is readable and obtain.
+                string header = reader.ReadLine();
+                if (header is null)
+                {
+                    throw new FormatException("File " + fileName +" does not have a header line.");
+                }
+
+                // Set up column name to index mapping.
+                string[] headers = SplitCSV(header, splitRegex);
+                Dictionary<string, int> headerMap = new(); 
+                for (int i = 0; i < headers.Length; i++)
+                {
+                    headerMap.Add(headers[i].ToLower(), i);
+                }
+
+                // Set up Property mapping for type V to PropertyInfo and column index in input data.
+                PropertyInfo[] propertyInfo = typeof(V).GetProperties();
+                Dictionary<PropertyInfo, int> propertyMap = new();
+                Dictionary<PropertyInfo, TypeConverter> propertyConverterMap = new();
+                for (int i = 0; i < propertyInfo.Length; i++)
+                {
+                    PropertyInfo info = propertyInfo[i];
+                    string propertyNameLower = info.Name.ToLower();
+                    // Only add if column of same name is present in input.
+                    if (headerMap.ContainsKey(propertyNameLower))
+                    {
+                        propertyConverterMap.Add(info, TypeDescriptor.GetConverter(info.PropertyType));
+                        propertyMap.Add(info, headerMap[propertyNameLower]);
+                    }
+                }
+
+                // Find column references in keyFormat.
+                Regex columnRefRegex = new(@"\{[^\}]+\}");
+                MatchCollection columnMatches = columnRefRegex.Matches(keyFormat);
+                Dictionary<string, string> keyVariableMap = new();
+                foreach (Match m in columnMatches)
+                {
+                    keyVariableMap.Add(m.Value.Substring(1, m.Value.Length - 2).ToLower(), m.Value);
+                }
+
+                string line;
+                while ((line = reader.ReadLine()) is not null)
+                {
+                    string[] data = SplitCSV(line, splitRegex);
+
+                    // Expand data into keyFormat to produce key. This must lead to a unique key.
+                    string key = keyFormat;
+                    foreach (string variableKey in keyVariableMap.Keys)
+                    {
+                        key = key.Replace(keyVariableMap[variableKey], data[headerMap[variableKey]]);
+                    }
+                    key = Regex.Replace(key.Trim().ToLower(), @"\s+", " ");
+
+                    // Type convert input data strings to appropriate types and add constructed V to Dictionary by key. 
+                    object[] values = new object[propertyMap.Count];
+                    int propertyPos = 0;
+                    foreach (PropertyInfo info in propertyMap.Keys)
+                    {
+                        values[propertyPos++] = propertyConverterMap[info].ConvertFromString(data[propertyMap[info]]);
+                    }
+
+                    // Duplicate keys do not work in Dictionary and do also not provide deterministic lookup results.
+                    // Change the keyFormat if the current one is not properly thought out. 
+                    if (!dictionary.ContainsKey(key) || duplicateKeyException)
+                    {
+                        dictionary.Add(key, (V)Activator.CreateInstance(typeof(V), values));
+                    }
+                }
+            }
+            return dictionary;
+        }
+
+        public static string[] SplitCSV(string line, Regex splitRegEx)
+        {
+            MatchCollection mc = splitRegEx.Matches(line);
+            string[] result = new string[mc.Count];
+            for (int i = 0; i < mc.Count; i++)
+            {
+                result[i] = mc[i].Value.TrimStart(';');
+            }
+            return result;
+        }
+
         // A few of the record definitions below have strange names to match column headers in Excel file
         public record Address(string Stadfang, string Svaedi)
         {
             public string Key => Stadfang.ToLower();
         }
+
+        public record AddressInfo(string Heiti_nf, string Husmerking, string Hnit, double N_HNIT_WGS84, double E_HNIT_WGS84);
 
         public record AreaSchedule(
             string Svaedi,
@@ -194,9 +318,22 @@ namespace AutoComplete.Models
             string Nafn
         );
 
-        public sealed record LabelKey(string Label)
+        // Record does for some reason not implement IComparable so a proper class is required.
+        public class LabelKey : IComparable<LabelKey>
         {
-            public string Key => Label.ToLower();
+            public string Label { get; init; }
+            public string Key { get; init; }
+
+            public LabelKey(string label)
+            {
+                Label = label;
+                Key = label.ToLower();
+            }
+
+            public override bool Equals(object other)
+            {
+                return Equals(other as LabelKey);
+            }
 
             public bool Equals(LabelKey other)
             {
@@ -207,11 +344,17 @@ namespace AutoComplete.Models
             {
                 return Key.GetHashCode();
             }
+
+            public int CompareTo(LabelKey other)
+            {
+                return Key.CompareTo(other.Key);
+            }
         }
 
+        // jQuery Autocomplete widget is case sensitive on JSON responses hence the lower case names.
         public record LabelValue(
             string label,
-            string value
+            AddressInfo info
         );
     }
 }

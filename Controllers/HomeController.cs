@@ -13,7 +13,7 @@ namespace AutoComplete.Controllers
 
         private DisposalModel DisposalModel { get; init; }
 
-        private Dictionary<DisposalModel.LabelKey, List<DisposalModel.Address>> AddressDictionary { get; init; }
+        private SortedDictionary<DisposalModel.LabelKey, List<DisposalModel.Address>> AddressDictionary { get; init; }
 
         public HomeController(
             DisposalModel disposalModel,
@@ -65,14 +65,14 @@ namespace AutoComplete.Controllers
             List<DisposalModel.AreaSchedule> BlueScheduleList
         );
 
-        public List<DisposalModel.LabelValue> AutoCompleteSearch(string term)
+        public List<DisposalModel.LabelValue> AutoCompleteSearch(string term, bool suppressExact = true)
         {
-            return DisposalModel.AutoCompleteSearch(term);
+            return DisposalModel.AutoCompleteSearch(term, suppressExact);
         }
 
-        public string AutoCompleteSearchP(string term, string callback)
+        public string AutoCompleteSearchP(string term, string callback, bool suppressExact = true)
         {
-            string serialized = JsonConvert.SerializeObject(DisposalModel.AutoCompleteSearch(term));
+            string serialized = JsonConvert.SerializeObject(DisposalModel.AutoCompleteSearch(term, suppressExact));
             return $"{callback}({serialized})";
         }
 

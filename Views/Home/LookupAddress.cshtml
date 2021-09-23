@@ -64,19 +64,22 @@
             $("#autocomplete").autocomplete({
                 source: function (request, response) {
                     $.ajax({
-                        url: "https://abendingar.kopavogur.is/Sorphirda/Home/AutoCompleteSearchP",
+                        url: "AutoCompleteSearchP", //"https://abendingar.kopavogur.is/Sorphirda/Home/AutoCompleteSearchP",
                         type: "GET",
                         dataType: "jsonp",
                         data: {
-                            term: request.term
+                            term: request.term,
+                            suppressExact: false
                         },
                         success: function (data) {
                             response(data);
                         }
                     });
                 },
-                select: function () {
-                    $(this).keydown();
+                select: function (event, ui) {
+                    if (ui.item.value.indexOf(" ") == -1) {
+                        $(this).keydown();
+                    }
                 }
             });
         }
