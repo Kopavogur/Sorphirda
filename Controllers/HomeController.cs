@@ -57,6 +57,11 @@ namespace AutoComplete.Controllers
             return null;
         }
 
+        public string LookupAddressRESTP(string address, string callback)
+        {
+            return SerializeWithCallback(LookupAddressREST(address), callback);
+        }
+
         public record DisposalInformation(
             string Address,
             string Area,
@@ -72,8 +77,7 @@ namespace AutoComplete.Controllers
 
         public string AutoCompleteSearchP(string term, string callback, bool suppressExact = true)
         {
-            string serialized = JsonConvert.SerializeObject(DisposalModel.AutoCompleteSearch(term, suppressExact));
-            return $"{callback}({serialized})";
+            return SerializeWithCallback(AutoCompleteSearch(term, suppressExact), callback);
         }
 
         public IActionResult Privacy()
@@ -85,6 +89,19 @@ namespace AutoComplete.Controllers
         public IActionResult Error()
         {
             return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+        }
+
+        private string SerializeWithCallback(object incoming, string callback)
+        {
+            string serialized = JsonConvert.SerializeObject(incoming);
+            if (string.IsNullOrWhiteSpace(callback))
+            {
+                return serialized;
+            }
+            else
+            {
+                return $"{callback}({serialized})";
+            }
         }
     }
 }

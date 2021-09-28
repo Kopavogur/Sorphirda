@@ -1,7 +1,5 @@
 ﻿using AutoComplete.Utilities;
 using Ganss.Excel;
-using NPOI.SS.UserModel;
-using NPOI.XSSF.UserModel;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -33,7 +31,10 @@ namespace AutoComplete.Models
             AreaScheduleBlueListDictionary = new();
             AreaDictionary = new();
             LoadAddressDictionary(disposalFile);
+            DateTime start = DateTime.Now;
             AddressInfoDictionary = CsvToDictionary<AddressInfo>(infoFile, "{Heiti_nf} {Husmerking} {Serheiti}", cultureInfo);
+            TimeSpan duration = DateTime.Now - start;
+            System.Diagnostics.Debug.WriteLine($"Total Time: {duration.TotalMilliseconds}");
         }
 
         public List<LabelValue> AutoCompleteSearch(string term, bool suppressExact = true)
@@ -105,7 +106,7 @@ namespace AutoComplete.Models
             return GetScheduleListFromArea(area, AreaScheduleGreyListDictionary, showFuture);
         }
 
-        private List<AreaSchedule> GetScheduleListFromArea(string area, Dictionary<string, List<AreaSchedule>> areaScheduleListDictionary, bool showFuture)
+        private static List<AreaSchedule> GetScheduleListFromArea(string area, Dictionary<string, List<AreaSchedule>> areaScheduleListDictionary, bool showFuture)
         {
             List<AreaSchedule> scheduleList = new();
             if (area is not null && areaScheduleListDictionary.ContainsKey(area)) {
@@ -189,7 +190,7 @@ namespace AutoComplete.Models
         }
 
         // Using ExcelMapper for this larger payload runs VERY slow and has a HUGE memory footprint.
-        // See the generic CsvToDictionary implementation below that provides a much more clement treatment.
+        // See the generic CsvToDictionary implementation below that offers a much more clement treatment.
         public void LoadAddressInfoDictionary(string workbookFile)
         {
             {
@@ -207,12 +208,13 @@ namespace AutoComplete.Models
             }
         }
 
-        public Dictionary<string, V> CsvToDictionary<V>(string fileName, string keyFormat, CultureInfo cultureInfo, bool duplicateKeyException = false) 
+        public static Dictionary<string, V> CsvToDictionary<V>(string fileName, string keyFormat, CultureInfo cultureInfo, bool duplicateKeyException = false)
         {
             Dictionary<string, V> dictionary = new();
 
             // Pattern to split on ; honoring double quotes.
-            Regex splitRegex = new("(?:^|;)(\"(?:[^\"])*\"|[^;]*)", RegexOptions.Compiled);
+            char sep = (cultureInfo.NumberFormat.NumberDecimalSeparator == ".") ? ',' : ';';
+            Regex splitRegex = new($"(?:^|{sep})(\"(?:[^\"])*\"|[^{sep}]*)", RegexOptions.Compiled);
 
             using (StreamReader reader = new(fileName))
             {
@@ -220,29 +222,30 @@ namespace AutoComplete.Models
                 string header = reader.ReadLine();
                 if (header is null)
                 {
-                    throw new FormatException("File " + fileName +" does not have a header line.");
+                    throw new FormatException("File " + fileName + " does not have a header line.");
                 }
 
                 // Set up column name to index mapping.
-                string[] headers = SplitCSV(header, splitRegex);
-                Dictionary<string, int> headerMap = new(); 
+                string[] headers = SplitCSV(header, sep);
+                Dictionary<string, int> headerMap = new();
                 for (int i = 0; i < headers.Length; i++)
                 {
                     headerMap.Add(headers[i].ToLower(), i);
                 }
 
-                // Set up Property mapping for type V to PropertyInfo and column index in input data.
-                PropertyInfo[] propertyInfo = typeof(V).GetProperties();
-                Dictionary<PropertyInfo, int> propertyMap = new();
-                Dictionary<PropertyInfo, TypeConverter> propertyConverterMap = new();
+                // Set up Property mapping for type V to ParameterInfo and column index in input data.
+                ConstructorInfo[] ci = typeof(V).GetConstructors(); 
+                ParameterInfo[] propertyInfo = ci[0].GetParameters();
+                Dictionary<ParameterInfo, int> propertyMap = new();
+                Dictionary<ParameterInfo, TypeConverter> propertyConverterMap = new();
                 for (int i = 0; i < propertyInfo.Length; i++)
                 {
-                    PropertyInfo info = propertyInfo[i];
+                    ParameterInfo info = propertyInfo[i];
                     string propertyNameLower = info.Name.ToLower();
                     // Only add if column of same name is present in input.
                     if (headerMap.ContainsKey(propertyNameLower))
                     {
-                        propertyConverterMap.Add(info, TypeDescriptor.GetConverter(info.PropertyType));
+                        propertyConverterMap.Add(info, TypeDescriptor.GetConverter(info.ParameterType));
                         propertyMap.Add(info, headerMap[propertyNameLower]);
                     }
                 }
@@ -256,11 +259,16 @@ namespace AutoComplete.Models
                     keyVariableMap.Add(m.Value.Substring(1, m.Value.Length - 2).ToLower(), m.Value);
                 }
 
+                DateTime enter = DateTime.Now, start;
+                double splitTime = 0, keyTime = 0, valuesTime = 0, instanceTime = 0;
                 string line;
                 while ((line = reader.ReadLine()) is not null)
                 {
-                    string[] data = SplitCSV(line, splitRegex);
+                    start = DateTime.Now;
+                    string[] data = SplitCSV(line, sep);
+                    splitTime += (DateTime.Now - start).TotalMilliseconds;
 
+                    start = DateTime.Now;
                     // Expand data into keyFormat to produce key. This must lead to a unique key.
                     string key = keyFormat;
                     foreach (string variableKey in keyVariableMap.Keys)
@@ -268,35 +276,103 @@ namespace AutoComplete.Models
                         key = key.Replace(keyVariableMap[variableKey], data[headerMap[variableKey]]);
                     }
                     key = Regex.Replace(key.Trim().ToLower(), @"\s+", " ");
+                    keyTime += (DateTime.Now - start).TotalMilliseconds;
 
+                    start = DateTime.Now;
                     // Type convert input data strings to appropriate types and add constructed V to Dictionary by key. 
                     object[] values = new object[propertyMap.Count];
                     int propertyPos = 0;
-                    foreach (PropertyInfo info in propertyMap.Keys)
+                    foreach (ParameterInfo info in propertyMap.Keys)
                     {
                         values[propertyPos++] = propertyConverterMap[info].ConvertFromString(data[propertyMap[info]]);
                     }
+                    valuesTime += (DateTime.Now - start).TotalMilliseconds;
 
+                    start = DateTime.Now;
                     // Duplicate keys do not work in Dictionary and do also not provide deterministic lookup results.
                     // Change keyFormat if the current one is not properly thought out. 
                     if (!dictionary.ContainsKey(key) || duplicateKeyException)
                     {
                         dictionary.Add(key, (V)Activator.CreateInstance(typeof(V), values));
                     }
+                    instanceTime += (DateTime.Now - start).TotalMilliseconds;
                 }
+                TimeSpan duration = DateTime.Now - enter;
+                System.Diagnostics.Debug.WriteLine($"Data Time: {duration.TotalMilliseconds}");
+                System.Diagnostics.Debug.WriteLine($"  Split Time: {splitTime}");
+                System.Diagnostics.Debug.WriteLine($"  Key Time: {keyTime}");
+                System.Diagnostics.Debug.WriteLine($"  Values Time: {valuesTime}");
+                System.Diagnostics.Debug.WriteLine($"  Instance Time: {instanceTime}");
             }
             return dictionary;
         }
 
-        public static string[] SplitCSV(string line, Regex splitRegEx)
+        /// <summary>
+        /// Perform split on line using Regex. This is clearly cleaner code than SplitCSV but takes twice the time.
+        /// </summary>
+        /// <param name="line">Line to split</param>
+        /// <param name="splitRegEx">Regex pattern to do the split with</param>
+        /// <param name="sep">Character to split on</param>
+        /// <returns>string[] with column values</returns>
+        public static string[] SplitCSVRegex(string line, Regex splitRegEx, char sep)
         {
             MatchCollection mc = splitRegEx.Matches(line);
             string[] result = new string[mc.Count];
             for (int i = 0; i < mc.Count; i++)
             {
-                result[i] = mc[i].Value.TrimStart(';');
+                result[i] = mc[i].Value.TrimStart(sep);
             }
             return result;
+        }
+
+        /// <summary>
+        /// Split line with old fashioned string processing.
+        /// </summary>
+        /// <param name="line">Line to split</param>
+        /// <param name="sep">Character to split on</param>
+        /// <returns>string[] with column values</returns>
+        public static string[] SplitCSV(string line, char sep)
+        {
+            char quote = '"';
+            string sQuote = quote.ToString();
+            List<string> result = new();
+            int pos = 0, len = line.Length;
+            while (pos < len)
+            {
+                int start, end;
+                bool isQuoted = false;
+                if (line.Substring(pos, 1) == quote.ToString())
+                {
+                    isQuoted = true;
+                    start = pos + 1;
+                    int segmentStart = start;
+                    while ((end = line.IndexOf(quote, segmentStart)) != -1 && end < len - 2 && line.Substring(end + 1, 1) == sQuote)
+                    {
+                        // Skip second quote in sequence as the first one is clearly not end of segment/value.
+                        segmentStart = end + 2;
+                    }
+                    
+                    if (end == -1) throw new FormatException($"Missing end quote starting at {pos} for line: '{line}'");
+                    // Move past closing quote.
+                    pos = end + 1;
+                    if (pos < len && line.Substring(pos, 1) != sep.ToString()) throw new FormatException($"Seperator not following end quote for line: '{line}'"); 
+                }
+                else
+                {
+                    start = pos;
+                    end = line.IndexOf(sep, pos);
+                    // Handle last segment/value in line
+                    end = (end == -1) ? len : end;
+                    pos = end;
+                }
+                result.Add(isQuoted ? line.Substring(start, end - start).Replace(sQuote + sQuote, sQuote) : line.Substring(start, end - start));
+                // Add empty string if line ends in sep.
+                if (pos == len - 1 && line.Substring(pos, 1) == sep.ToString()) result.Add("");
+                // Skip past last found sep.
+                pos++;
+            }
+
+            return result.ToArray<string>();
         }
 
         // A few of the record definitions below have strange names to match column headers in Excel file
@@ -305,7 +381,18 @@ namespace AutoComplete.Models
             public string Key => Stadfang.ToLower();
         }
 
-        public record AddressInfo(string Heiti_nf, string Husmerking, string Hnit, double N_HNIT_WGS84, double E_HNIT_WGS84);
+        public record AddressInfo(
+            string Heiti_nf, 
+            string Husmerking, 
+            string Postnr, 
+            string Serheiti,
+            string Hnit,
+            double N_HNIT_WGS84, 
+            double E_HNIT_WGS84)
+        {
+            public double? X => double.Parse(Regex.Match(Hnit, @"POINT \((?<X>[\d,\.]+?) (?<Y>[\d,\.]+?)\)").Groups["X"].Value.Replace(",","."), CultureInfo.InvariantCulture);
+            public double? Y => double.Parse(Regex.Match(Hnit, @"POINT \((?<X>[\d,\.]+?) (?<Y>[\d,\.]+?)\)").Groups["Y"].Value.Replace(",", "."), CultureInfo.InvariantCulture);
+        }
 
         public record AreaSchedule(
             string Svaedi,
