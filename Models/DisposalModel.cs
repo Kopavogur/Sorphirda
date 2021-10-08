@@ -31,10 +31,7 @@ namespace AutoComplete.Models
             AreaScheduleBlueListDictionary = new();
             AreaDictionary = new();
             LoadAddressDictionary(disposalFile);
-            DateTime start = DateTime.Now;
             AddressInfoDictionary = CsvToDictionary<AddressInfo>(infoFile, "{Heiti_nf} {Husmerking} {Serheiti}", cultureInfo);
-            TimeSpan duration = DateTime.Now - start;
-            System.Diagnostics.Debug.WriteLine($"Total Time: {duration.TotalMilliseconds}");
         }
 
         public List<LabelValue> AutoCompleteSearch(string term, bool suppressExact = true)
@@ -215,6 +212,7 @@ namespace AutoComplete.Models
             // Pattern to split on ; honoring double quotes.
             char sep = (cultureInfo.NumberFormat.NumberDecimalSeparator == ".") ? ',' : ';';
             Regex splitRegex = new($"(?:^|{sep})(\"(?:[^\"])*\"|[^{sep}]*)", RegexOptions.Compiled);
+            Regex columnRefRegex = new(@"\{[^\}]+\}", RegexOptions.Compiled);
 
             using (StreamReader reader = new(fileName))
             {
@@ -251,7 +249,6 @@ namespace AutoComplete.Models
                 }
 
                 // Find column references in keyFormat.
-                Regex columnRefRegex = new(@"\{[^\}]+\}");
                 MatchCollection columnMatches = columnRefRegex.Matches(keyFormat);
                 Dictionary<string, string> keyVariableMap = new();
                 foreach (Match m in columnMatches)
@@ -259,16 +256,12 @@ namespace AutoComplete.Models
                     keyVariableMap.Add(m.Value.Substring(1, m.Value.Length - 2).ToLower(), m.Value);
                 }
 
-                DateTime enter = DateTime.Now, start;
                 double splitTime = 0, keyTime = 0, valuesTime = 0, instanceTime = 0;
                 string line;
                 while ((line = reader.ReadLine()) is not null)
                 {
-                    start = DateTime.Now;
                     string[] data = SplitCSV(line, sep);
-                    splitTime += (DateTime.Now - start).TotalMilliseconds;
 
-                    start = DateTime.Now;
                     // Expand data into keyFormat to produce key. This must lead to a unique key.
                     string key = keyFormat;
                     foreach (string variableKey in keyVariableMap.Keys)
@@ -276,9 +269,7 @@ namespace AutoComplete.Models
                         key = key.Replace(keyVariableMap[variableKey], data[headerMap[variableKey]]);
                     }
                     key = Regex.Replace(key.Trim().ToLower(), @"\s+", " ");
-                    keyTime += (DateTime.Now - start).TotalMilliseconds;
 
-                    start = DateTime.Now;
                     // Type convert input data strings to appropriate types and add constructed V to Dictionary by key. 
                     object[] values = new object[propertyMap.Count];
                     int propertyPos = 0;
@@ -286,23 +277,14 @@ namespace AutoComplete.Models
                     {
                         values[propertyPos++] = propertyConverterMap[info].ConvertFromString(data[propertyMap[info]]);
                     }
-                    valuesTime += (DateTime.Now - start).TotalMilliseconds;
 
-                    start = DateTime.Now;
                     // Duplicate keys do not work in Dictionary and do also not provide deterministic lookup results.
                     // Change keyFormat if the current one is not properly thought out. 
                     if (!dictionary.ContainsKey(key) || duplicateKeyException)
                     {
                         dictionary.Add(key, (V)Activator.CreateInstance(typeof(V), values));
                     }
-                    instanceTime += (DateTime.Now - start).TotalMilliseconds;
                 }
-                TimeSpan duration = DateTime.Now - enter;
-                System.Diagnostics.Debug.WriteLine($"Data Time: {duration.TotalMilliseconds}");
-                System.Diagnostics.Debug.WriteLine($"  Split Time: {splitTime}");
-                System.Diagnostics.Debug.WriteLine($"  Key Time: {keyTime}");
-                System.Diagnostics.Debug.WriteLine($"  Values Time: {valuesTime}");
-                System.Diagnostics.Debug.WriteLine($"  Instance Time: {instanceTime}");
             }
             return dictionary;
         }
