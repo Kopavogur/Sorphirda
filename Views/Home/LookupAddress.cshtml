@@ -8,6 +8,8 @@
 
     <div class="container">
         <form class="form-group" method="post">
+            <input type="text" name="N_HNIT_WGS84" id="N_HNIT_WGS84" class="form-control" />
+            <input type="text" name="E_HNIT_WGS84" id="E_HNIT_WGS84" class="form-control" />
             <input name="address" id="address" class="form-control" placeholder="Gata í nefnifalli og númer" spellcheck="false" autofocus value="@ViewBag.Address" />
             <input type="submit" value="Submit" class="btn btn-primary form-control mt-1" />
             <input type="submit" value="REST" class="btn btn-secondary form-control mt-1" onclick="$(this).closest('form').attr('action', 'LookupAddressREST');" />
@@ -74,11 +76,31 @@
                             suppressExact: false
                         },
                         success: function (data) {
+                            let input = $("#address").val().toLowerCase();
+                            let eHnit = "";
+                            let nHnit = "";
+                            data.forEach((c) => {
+                                if (input == c.label.toLowerCase()) {
+                                    eHnit = c.info.E_HNIT_WGS84;
+                                    nHnit = c.info.N_HNIT_WGS84;
+                                }
+                            });
+                            $("#E_HNIT_WGS84").val(eHnit);
+                            $("#N_HNIT_WGS84").val(nHnit);
                             response(data);
                         }
                     });
                 },
                 select: function (event, ui) {
+                    if (ui.item.info != null) {
+                        alert()
+                        // alert(JSON.stringify(ui.item.info));
+                        // alert(ui.item.info.N_HNIT_WGS84 + "," + ui.item.info.E_HNIT_WGS84);
+                        $("#E_HNIT_WGS84").val = ui.item.info.E_HNIT_WGS84;
+                        $("#N_HNIT_WGS84").val = ui.item.info.N_HNIT_WGS84;
+                        lastComplete = null;
+
+                    }
                     if (ui.item.value.indexOf(" ") == -1) {
                         $(this).keydown();
                     }
